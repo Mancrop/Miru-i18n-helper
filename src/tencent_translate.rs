@@ -4,6 +4,7 @@ use ring::hmac;
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
+use std::thread::sleep;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn sign(key: &[u8], msg: &[u8]) -> Vec<u8> {
@@ -13,13 +14,22 @@ fn sign(key: &[u8], msg: &[u8]) -> Vec<u8> {
 
 pub struct TencentTranslate {}
 
+impl TencentTranslate {
+    pub fn new() -> Self {
+        TencentTranslate {}
+    }
+}
+
 impl translate::Translate for TencentTranslate {
     fn translate(
         &self,
         src_lang: &str,
         dst_lang: &str,
         src: &str,
+        idle: u64,
     ) -> Result<String, translate::Error> {
+        sleep(std::time::Duration::from_millis(idle));
+        
         let secret_id = match env::var("TENCENT_TRANSLATION_SECRET_ID") {
             Ok(val) => val,
             Err(_) => {
@@ -48,8 +58,8 @@ impl translate::Translate for TencentTranslate {
         let action = "TextTranslate";
         let payload = json!({
             "SourceText": src,
-            "Source": dst_lang,
-            "Target": src_lang,
+            "Source": src_lang,
+            "Target": dst_lang,
             "ProjectId": 0
         });
         let endpoint = "https://tmt.tencentcloudapi.com";
