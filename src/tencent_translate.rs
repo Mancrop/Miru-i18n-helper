@@ -137,9 +137,12 @@ impl translate::Translate for TencentTranslate {
         // println!("{:?}", headers);
         let response = client
             .post(endpoint)
-            .headers(headers
+            .headers(
+                headers
                     .iter()
-                    .map(|(k, v)| (k.parse().unwrap(), v.parse().unwrap())).collect::<reqwest::header::HeaderMap<_>>())
+                    .map(|(k, v)| (k.parse().unwrap(), v.parse().unwrap()))
+                    .collect::<reqwest::header::HeaderMap<_>>(),
+            )
             .json(&payload)
             .send()?;
 

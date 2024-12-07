@@ -87,6 +87,7 @@ pub fn handle_json_translate(
     src_lang: &str,
     dst_lang: &str,
     translator: &impl translate::Translate,
+    idle: u64,
 ) -> Result<(), Error> {
     fn translate_json(
         src: &Map<String, Value>,
@@ -95,6 +96,7 @@ pub fn handle_json_translate(
         src_lang: &str,
         dst_lang: &str,
         translator: &impl translate::Translate,
+        idle: u64,
     ) -> MyResult<()> {
         for (key, value) in src {
             println!("key: {key}, value: {value}");
@@ -108,7 +110,7 @@ pub fn handle_json_translate(
                     let translated = if let Some(Value::String(original)) = ref_json.get(key) {
                         original.clone()
                     } else {
-                        translate_with_placeholders(s, src_lang, dst_lang, translator, 300)?
+                        translate_with_placeholders(s, src_lang, dst_lang, translator, idle)?
                     };
                     dst.insert(key.to_string(), Value::String(translated));
                     continue;
@@ -132,6 +134,7 @@ pub fn handle_json_translate(
                         src_lang,
                         dst_lang,
                         translator,
+                        idle,
                     )?;
                 }
                 _ => {
@@ -165,6 +168,7 @@ pub fn handle_json_translate(
         src_lang,
         dst_lang,
         translator,
+        idle,
     )?;
 
     write_json(&dst_path, &dst_json).or(Err(Error::new(
@@ -183,25 +187,53 @@ fn translate_with_placeholders(
     idle: u64,
 ) -> MyResult<String> {
     let placeholder_pattern = regex::Regex::new(r"\{[^}]+\}").unwrap();
-    let mut placeholders = Vec::new();
-    let mut temp_text = text.to_string();
+    let mut result = String::new();
+    let mut last_end = 0;
 
-    for (i, mat) in placeholder_pattern.find_iter(text).enumerate() {
-        let placeholder = mat.as_str();
-        placeholders.push(placeholder.to_string());
-        temp_text = temp_text.replace(placeholder, &format!("__PLACEHOLDER_{i}__"));
+    // 分段翻译括号前的内容
+    for mat in placeholder_pattern.find_iter(text) {
+        let start = mat.start();
+        
+        // 翻译括号前的文本
+        if start > last_end {
+            let text_before = text[last_end..start].trim();
+            if !text_before.is_empty() {
+                let translated = translator
+                    .translate(src_lang, dst_lang, text_before, idle)
+                    .cast(ErrorType::TranslateError)?;
+                result.push_str(&translated);
+                result.push(' '); // 添加空格以保持可读性
+            }
+        }
+        
+        // 添加括号内容
+        result.push_str(mat.as_str());
+        last_end = mat.end();
     }
 
-    let translated = translator
-        .translate(src_lang, dst_lang, &temp_text, idle)
-        .cast(ErrorType::TranslateError)?;
-
-    let mut final_text = translated;
-    for (i, placeholder) in placeholders.iter().enumerate() {
-        final_text = final_text.replace(&format!("__PLACEHOLDER_{i}__"), placeholder);
+    // 处理最后一个括号后的文本
+    if last_end < text.len() {
+        let text_after = text[last_end..].trim();
+        if !text_after.is_empty() {
+            let translated = translator
+                .translate(src_lang, dst_lang, text_after, idle)
+                .cast(ErrorType::TranslateError)?;
+            result.push(' '); // 添加空格以保持可读性
+            result.push_str(&translated);
+        }
     }
 
-    Ok(final_text)
+    // 如果文本中没有括号，直接翻译整个文本
+    if result.is_empty() {
+        result = translator
+            .translate(src_lang, dst_lang, text, idle)
+            .cast(ErrorType::TranslateError)?;
+    }
+
+    // 清理多余的空格
+    result = result.trim().to_string();
+
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -215,7 +247,7 @@ mod test {
         let src_lang = "en";
         let dst_lang = "zh";
         let translator = crate::tencent_translate::TencentTranslate::new();
-        let result = handle_json_translate(root_path, src_lang, dst_lang, &translator);
+        let result = handle_json_translate(root_path, src_lang, dst_lang, &translator, 300);
         if let Err(e) = result {
             println!("{e}");
             panic!();
