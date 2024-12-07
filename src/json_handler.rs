@@ -1,6 +1,6 @@
 use crate::translate;
+use colored::Colorize;
 use serde_json::{json, Map, Value};
-use colored::*;
 
 #[derive(Debug)]
 #[allow(unused)]
@@ -59,7 +59,7 @@ fn read_json(path: &str) -> MyResult<Value> {
     Ok(v)
 }
 
-fn write_json(path: &str, json_map: Value) -> Result<(), Box<dyn std::error::Error>> {
+fn write_json(path: &str, json_map: &Value) -> Result<(), Box<dyn std::error::Error>> {
     let file = std::fs::File::create(path)?;
     serde_json::to_writer_pretty(file, &json_map)?;
     Ok(())
@@ -86,21 +86,8 @@ pub fn handle_json_translate(
     root_path: &str,
     src_lang: &str,
     dst_lang: &str,
-    translator: impl translate::Translate,
+    translator: &impl translate::Translate,
 ) -> Result<(), Error> {
-    let src_path = format!("{}/{}.json", root_path, src_lang);
-    let dst_path = format!("{}/{}.json", root_path, dst_lang);
-    let src_json = read_json(&src_path)?;
-    let mut dst_json = json!({});
-    let dst_json_original = read_json(&dst_path);
-    let dst_json_original = if dst_json_original.is_err() {
-        let fmt_str = format!("Warning: read target json error --> {}", dst_json_original.err().unwrap());
-        println!("{}", fmt_str.yellow());
-        json!({})
-    } else {
-        dst_json_original.unwrap()
-    };
-
     fn translate_json(
         src: &Map<String, Value>,
         dst: &mut Map<String, Value>,
@@ -110,7 +97,7 @@ pub fn handle_json_translate(
         translator: &impl translate::Translate,
     ) -> MyResult<()> {
         for (key, value) in src {
-            println!("key: {}, value: {}", key, value);
+            println!("key: {key}, value: {value}");
             // ignore languages settings
             if key == "languages" {
                 dst.insert(key.to_string(), value.clone());
@@ -118,12 +105,8 @@ pub fn handle_json_translate(
             }
             match value {
                 Value::String(s) => {
-                    let translated = if let Some(original) = ref_json.get(key) {
-                        if let Value::String(original) = original {
-                            original.clone()
-                        } else {
-                            translate_with_placeholders(s, src_lang, dst_lang, translator, 300)?
-                        }
+                    let translated = if let Some(Value::String(original)) = ref_json.get(key) {
+                        original.clone()
                     } else {
                         translate_with_placeholders(s, src_lang, dst_lang, translator, 300)?
                     };
@@ -137,17 +120,20 @@ pub fn handle_json_translate(
                         dst[key] = json!({});
                     }
                     let empty_json = json!({});
-                    let new_ref_json = if let Some(original) = ref_json.get(key) {
-                        if let Value::Object(original) = original {
-                            original
-                        } else {
-                            empty_json.as_object().unwrap()
-                        }
+                    let new_ref_json = if let Some(Value::Object(original)) = ref_json.get(key) {
+                        original
                     } else {
                         empty_json.as_object().unwrap()
                     };
-                    translate_json(o, dst[key].as_object_mut().unwrap(), new_ref_json, src_lang, dst_lang, translator)?;
-                },
+                    translate_json(
+                        o,
+                        dst[key].as_object_mut().unwrap(),
+                        new_ref_json,
+                        src_lang,
+                        dst_lang,
+                        translator,
+                    )?;
+                }
                 _ => {
                     return Err(Error::new(
                         ErrorType::UnsupportedJsonType,
@@ -159,17 +145,33 @@ pub fn handle_json_translate(
         Ok(())
     }
 
+    let src_path = format!("{root_path}/{src_lang}.json");
+    let dst_path = format!("{root_path}/{dst_lang}.json");
+    let src_json = read_json(&src_path)?;
+    let mut dst_json = json!({});
+    let dst_json_original = read_json(&dst_path);
+    let dst_json_original = if let Err(err_msg) = dst_json_original {
+        let fmt_str = format!("Warning: read target json error --> {err_msg}");
+        println!("{}", fmt_str.yellow());
+        json!({})
+    } else {
+        dst_json_original.unwrap()
+    };
+
     translate_json(
         src_json.as_object().unwrap(),
         dst_json.as_object_mut().unwrap(),
         dst_json_original.as_object().unwrap(),
         src_lang,
         dst_lang,
-        &translator,
+        translator,
     )?;
-    
-    write_json(&dst_path, dst_json).or(Err(Error::new(ErrorType::WriteJsonError, "Write Json Error")))?;
-    
+
+    write_json(&dst_path, &dst_json).or(Err(Error::new(
+        ErrorType::WriteJsonError,
+        "Write Json Error",
+    )))?;
+
     Ok(())
 }
 
@@ -187,7 +189,7 @@ fn translate_with_placeholders(
     for (i, mat) in placeholder_pattern.find_iter(text).enumerate() {
         let placeholder = mat.as_str();
         placeholders.push(placeholder.to_string());
-        temp_text = temp_text.replace(placeholder, &format!("__PLACEHOLDER_{}__", i));
+        temp_text = temp_text.replace(placeholder, &format!("__PLACEHOLDER_{i}__"));
     }
 
     let translated = translator
@@ -196,7 +198,7 @@ fn translate_with_placeholders(
 
     let mut final_text = translated;
     for (i, placeholder) in placeholders.iter().enumerate() {
-        final_text = final_text.replace(&format!("__PLACEHOLDER_{}__", i), placeholder);
+        final_text = final_text.replace(&format!("__PLACEHOLDER_{i}__"), placeholder);
     }
 
     Ok(final_text)
@@ -206,16 +208,16 @@ fn translate_with_placeholders(
 mod test {
     #[allow(unused)]
     use super::*;
-    
+
     #[test]
     fn test_handle_json_translate() {
         let root_path = "./mytest";
         let src_lang = "en";
         let dst_lang = "zh";
         let translator = crate::tencent_translate::TencentTranslate::new();
-        let result = handle_json_translate(root_path, src_lang, dst_lang, translator);
+        let result = handle_json_translate(root_path, src_lang, dst_lang, &translator);
         if let Err(e) = result {
-            println!("{}", e);
+            println!("{e}");
             panic!();
         }
     }

@@ -21,6 +21,7 @@ impl TencentTranslate {
 }
 
 impl translate::Translate for TencentTranslate {
+    #[allow(clippy::too_many_lines)]
     fn translate(
         &self,
         src_lang: &str,
@@ -29,26 +30,20 @@ impl translate::Translate for TencentTranslate {
         idle: u64,
     ) -> Result<String, translate::Error> {
         sleep(std::time::Duration::from_millis(idle));
-        
-        let secret_id = match env::var("TENCENT_TRANSLATION_SECRET_ID") {
-            Ok(val) => val,
-            Err(_) => {
-                // println!("Please set TENCENT_TRANSLATION_SECRET_ID environment variable");
-                return Err(translate::Error::new(
-                    translate::ErrorType::MissingSecretId,
-                    "Missing TENCENT_TRANSLATION_SECRET_ID",
-                ));
-            }
+
+        let Ok(secret_id) = env::var("TENCENT_TRANSLATION_SECRET_ID") else {
+            // println!("Please set TENCENT_TRANSLATION_SECRET_ID environment variable");
+            return Err(translate::Error::new(
+                translate::ErrorType::MissingSecretId,
+                "Missing TENCENT_TRANSLATION_SECRET_ID",
+            ));
         };
-        let secret_key = match env::var("TENCENT_TRANSLATION_SECRET_KEY") {
-            Ok(val) => val,
-            Err(_) => {
-                // println!("Please set TENCENT_TRANSLATION_SECRET_KEY environment variable");
-                return Err(translate::Error::new(
-                    translate::ErrorType::MissingSecretKey,
-                    "Missing TENCENT_TRANSLATION_SECRET_KEY",
-                ));
-            }
+        let Ok(secret_key) = env::var("TENCENT_TRANSLATION_SECRET_KEY") else {
+            // println!("Please set TENCENT_TRANSLATION_SECRET_KEY environment variable");
+            return Err(translate::Error::new(
+                translate::ErrorType::MissingSecretKey,
+                "Missing TENCENT_TRANSLATION_SECRET_KEY",
+            ));
         };
 
         let service = "tmt";
@@ -69,6 +64,7 @@ impl translate::Translate for TencentTranslate {
             .duration_since(UNIX_EPOCH)
             .cast(ErrorType::Others)?
             .as_secs();
+        #[allow(clippy::cast_possible_wrap)]
         let date = chrono::DateTime::from_timestamp(timestamp as i64, 0)
             .unwrap()
             .format("%Y-%m-%d")
@@ -90,17 +86,10 @@ impl translate::Translate for TencentTranslate {
             ring::digest::digest(&ring::digest::SHA256, payload.to_string().as_bytes());
         let payload_hash = hex::encode(hashed_request_payload);
         let canonical_request = format!(
-            "{}\n{}\n{}\n{}\n{}\n{}",
-            http_request_method,
-            canonical_uri,
-            canonical_querystring,
-            canonical_headers,
-            signed_headers,
-            payload_hash,
-        );
+            "{http_request_method}\n{canonical_uri}\n{canonical_querystring}\n{canonical_headers}\n{signed_headers}\n{payload_hash}");
 
         // Step 2: Create String to Sign
-        let credential_scope = format!("{}/{}/tc3_request", date, service);
+        let credential_scope = format!("{date}/{service}/tc3_request");
         let hashed_canonical_request =
             ring::digest::digest(&ring::digest::SHA256, canonical_request.as_bytes());
         let string_to_sign = format!(
@@ -112,7 +101,7 @@ impl translate::Translate for TencentTranslate {
         );
 
         // Step 3: Calculate Signature
-        let secret_date = sign(format!("TC3{}", secret_key).as_bytes(), date.as_bytes());
+        let secret_date = sign(format!("TC3{secret_key}").as_bytes(), date.as_bytes());
         let secret_service = sign(&secret_date, service.as_bytes());
         let secret_signing = sign(&secret_service, b"tc3_request");
         let signature = hmac::sign(
@@ -148,11 +137,9 @@ impl translate::Translate for TencentTranslate {
         // println!("{:?}", headers);
         let response = client
             .post(endpoint)
-            .headers(reqwest::header::HeaderMap::from_iter(
-                headers
+            .headers(headers
                     .iter()
-                    .map(|(k, v)| (k.parse().unwrap(), v.parse().unwrap())),
-            ))
+                    .map(|(k, v)| (k.parse().unwrap(), v.parse().unwrap())).collect::<reqwest::header::HeaderMap<_>>())
             .json(&payload)
             .send()?;
 
@@ -160,7 +147,7 @@ impl translate::Translate for TencentTranslate {
 
         res["Response"]["TargetText"]
             .as_str()
-            .map(|x| x.to_string())
+            .map(std::string::ToString::to_string)
             .ok_or(translate::Error::new(
                 ErrorType::ApiParseError,
                 "Failed to parse response",

@@ -58,5 +58,11 @@ impl Display for Error {
 }
 
 pub trait Translate {
-    fn translate(&self, src_lang: &str, dst_lang: &str, src: &str, idle: u64) -> Result<String, Error>;
+    fn translate(
+        &self,
+        src_lang: &str,
+        dst_lang: &str,
+        src: &str,
+        idle: u64,
+    ) -> Result<String, Error>;
 }
