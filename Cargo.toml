@@ -13,3 +13,4 @@ regex = "1.11.1"
 reqwest = { version = "0.12.9", features = ["blocking", "json"] }
 ring = "0.17.8"
 serde_json = { version = "1.0.133", features = ["preserve_order"] }
+tabled = { version = "0.17.0", features = ["ansi"] }

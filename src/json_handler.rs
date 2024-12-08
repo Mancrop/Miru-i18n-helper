@@ -99,7 +99,7 @@ pub fn handle_json_translate(
         idle: u64,
     ) -> MyResult<()> {
         for (key, value) in src {
-            println!("key: {key}, value: {value}");
+            // println!("key: {key}, value: {value}");
             // ignore languages settings
             if key == "languages" {
                 dst.insert(key.to_string(), value.clone());
@@ -110,7 +110,7 @@ pub fn handle_json_translate(
                     let translated = if let Some(Value::String(original)) = ref_json.get(key) {
                         original.clone()
                     } else {
-                        translate_with_placeholders(s, src_lang, dst_lang, translator, idle)?
+                        translate(s, src_lang, dst_lang, translator, idle)?
                     };
                     dst.insert(key.to_string(), Value::String(translated));
                     continue;
@@ -179,7 +179,7 @@ pub fn handle_json_translate(
     Ok(())
 }
 
-fn translate_with_placeholders(
+fn translate(
     text: &str,
     src_lang: &str,
     dst_lang: &str,
@@ -193,7 +193,7 @@ fn translate_with_placeholders(
     // 分段翻译括号前的内容
     for mat in placeholder_pattern.find_iter(text) {
         let start = mat.start();
-        
+
         // 翻译括号前的文本
         if start > last_end {
             let text_before = text[last_end..start].trim();
@@ -205,7 +205,7 @@ fn translate_with_placeholders(
                 result.push(' '); // 添加空格以保持可读性
             }
         }
-        
+
         // 添加括号内容
         result.push_str(mat.as_str());
         last_end = mat.end();
