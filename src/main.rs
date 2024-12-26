@@ -122,6 +122,7 @@ fn main() -> Result<(), ()> {
         if dst_lang == src_lang {
             let info = format!("Skip translating from {src_lang} to {dst_lang}");
             println!("{}", info.blue());
+            res_vec.push(Ok(()));
             continue;
         }
         let info = format!("Translating from {src_lang} to {dst_lang}");
@@ -142,13 +143,5 @@ fn main() -> Result<(), ()> {
         .to_string();
     println!("{table}");
 
-    // if let Err(e) = result {
-    //     let error_str = format!("{e}");
-    //     println!("{}", error_str.red());
-    //     Err(())
-    // } else {
-    //     println!("{}", "Translate success".green());
-    //     Ok(())
-    // }
     Ok(())
 }
